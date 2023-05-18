@@ -35,7 +35,7 @@ class NavigationController():
             }
         ]
         self.parent = parent
-        self.move_publisher = rospy.Publisher("/stretch_diff_drive_controller/cmd_vel", Twist, queue_size=5)
+        self.move_publisher = rospy.Publisher("/stretch/cmd_vel", Twist, queue_size=5)
 
     def mouseover_event(self, event):
         pass
