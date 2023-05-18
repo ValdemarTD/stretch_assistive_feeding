@@ -1,6 +1,10 @@
 import hello_helpers.misc as hm
 import multipoint_command as mc
 import rospy
+
+
+import ik_solver
+
 #Test
 class ActionLibrary(mc.MultiPointCommand):
 
@@ -9,6 +13,7 @@ class ActionLibrary(mc.MultiPointCommand):
         Function that initializes the inhereted hm.HelloNode class.
         :param self: The self reference.
         """
+        self.ik = ik_solver.IKSolver()
         hm.HelloNode.__init__(self)
         self.relevant_joints = ['wrist_extension', 'joint_lift', 'joint_wrist_yaw']
         
@@ -21,28 +26,15 @@ class ActionLibrary(mc.MultiPointCommand):
         "Rotates CW 90 degrees"
         pass 
 
-    def toggleGripper():
+    def toggleGripper(self, open):
         "Open/Close Gripper"
-        pass 
+        magnitude = 0.2
+        if open:
+            direction = -1
+        else:
+            direction = 1
+        self.move_to_pose({'joint_gripper_finger_left':magnitude*direction})
 
-    def jointMovement(self, min:0, max:1, joint_name, magnitude, direction):
-        """
-        Moves joint by some magnitude based on direction
-
-        Return: True if valid and successful, False otherwise
-        """
-        #Get joint position designated
-        joints = self.print_states(self.relevant_joints)
-        joint_position = joints[joint_name]
-
-        #Check if mag + dir is possible, then attempt to execute
-        offset = magnitude*direction
-        if offset + joint_position > max or offset + joint_position < min:
-            rospy.loginfo("Invalid parameters: Offset to large (>1) or too small (<0.2)")
-            return False
-        self.move_to_pose({'joint_lift': joint_position + magnitude*direction})
-        return True
-        
 
 
     def moveLift(self, magnitude, direction):
@@ -61,17 +53,43 @@ class ActionLibrary(mc.MultiPointCommand):
         """
         self.jointMovement(min=0, max=0.5, joint_name='wrist_extension',magnitude=magnitude, direction=direction)
 
-    def ik(self):
+    def ik(self, goal):
         #Raw ik move
+        """
+        Input: goal is a [x,y,z] position from base_link
+        """
+        
+        pass
 
     def delivery(self):
         #Some trajectory command later
-        #  
         pass 
 
     def retrieveFood(self):
         #
         pass 
+
+
+
+
+    def jointMovement(self, min:0, max:1, joint_name, magnitude, direction):
+        """
+        Moves joint by some magnitude based on direction
+
+        Return: True if valid and successful, False otherwise
+        """
+        #Get joint position designated
+        joints = self.print_states(self.relevant_joints)
+        joint_position = joints[joint_name]
+
+        #Check if mag + dir is possible, then attempt to execute
+        offset = magnitude*direction
+        if offset + joint_position > max or offset + joint_position < min:
+            rospy.loginfo("Invalid parameters: Offset to large (>1) or too small (<0.2)")
+            return False
+        self.move_to_pose({'joint_lift': joint_position + magnitude*direction})
+        return True
+
 
     #Move Later
     def callback(self, msg):
