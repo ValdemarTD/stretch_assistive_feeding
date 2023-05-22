@@ -1,4 +1,5 @@
 #! /usr/bin/env python3
+import rospy 
 import ikpy.urdf.utils
 import ikpy.chain
 import pathlib
@@ -7,6 +8,7 @@ from IPython import display
 import ipywidgets as widgets
 import ikpy.utils.plot as plot_utils
 import matplotlib.pyplot as plt
+import np 
 
 class IKSolver():
     def __init__(self):
@@ -30,12 +32,10 @@ class IKSolver():
         self.chain.plot(q_soln, ax, target=target_point, show=True)
         
         if self.isValidMove(target_point, q_soln):
-            self.move_to_configuration(q_soln)
+            return self.move_to_configuration(q_soln)
         else:
-            #self.move_to_configuration(q_soln)
-            #print(q_soln)
-            #print(self.get_current_configuration())
-            print("NO")
+            rospy.loginfo("Invalid Coordinates: cannot reach")
+            return False 
         
     def forwardKinematics(self):
         q = self.get_current_configuration()
@@ -54,24 +54,15 @@ class IKSolver():
             q_lift = q[2]
             q_arm = q[4] + q[5] + q[6] + q[7]
             q_yaw = q[8]-(np.pi/2)
-            print(q_yaw)
 
-            robot.lift.move_to(q_lift)
-            robot.arm.move_to(q_arm)
-            robot.end_of_arm.move_to('wrist_yaw', q_yaw)
-            robot.push_command()
         elif self.tool == 'tool_stretch_dex_wrist':
             q_lift = q[2]
             q_arm = q[4] + q[5] + q[6] + q[7]
             q_yaw = q[8]
             q_pitch = q[10]
             q_roll = q[11]
-            robot.lift.move_to(q_lift)
-            robot.arm.move_to(q_arm)
-            robot.end_of_arm.move_to('wrist_yaw', q_yaw)
-            robot.end_of_arm.move_to('wrist_pitch', q_pitch)
-            robot.end_of_arm.move_to('wrist_roll', q_roll)
-            robot.push_command()
+        
+        return {'joint_lift':q_lift, 'wrist_extension': q_arm, 'wrist_yaw': q_yaw}
 
 
     #Gets the current pose of the robot

@@ -67,7 +67,7 @@ class MultiPointCommand(hm.HelloNode):
 		self.trajectory_client.send_goal(trajectory_goal)
 		rospy.loginfo('Sent list of goals = {0}'.format(trajectory_goal))
 		self.trajectory_client.wait_for_result()
-		print(trajectory_goal.trajectory)
+		
 	def main(self):
 		"""
 		Function that initiates the multipoint_command function.

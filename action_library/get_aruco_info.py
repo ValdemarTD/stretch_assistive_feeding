@@ -10,19 +10,21 @@ from std_srvs.srv import Trigger
 from geometry_msgs.msg import TransformStamped, Transform
 from sensor_msgs.msg import JointState
 import math 
-from std_msgs.msg import Float32, Int8
+from std_msgs.msg import Float32, Int8, String
 import numpy as np 
 
 
-class ArucoNavigationNode(hm.HelloNode):
+class ArucoNavigationNode():
     def __init__(self):
 
         super().__init__()
-        
-        self.translation = None
-        self.rotation = None
-        self.joint_state = None
-        self.current_state = None
+
+        self.follow_tag_subscriber = rospy.Subscriber(
+            "tag_name", String, self.follow_tag_callback
+        )
+
+        self.stored_tag_name = "None"
+
 
         #Controls how many duplicates it will tolerate before defaulting
         self.count = 0
@@ -38,6 +40,9 @@ class ArucoNavigationNode(hm.HelloNode):
 
         self.last_transform = Transform()
 
+
+    def follow_tag_callback(self, msg):
+        self.stored_tag_name = msg.data
 
     def handleTransforms(self, tag_name):
             """
@@ -85,33 +90,27 @@ class ArucoNavigationNode(hm.HelloNode):
         '''     
         #Check if tag is in view
         try:
-            tag_name = 'wrist_inside'
+            tag_name = self.stored_tag_name
             self.handleTransforms(tag_name)
         #Tag not found
         except (tf2_ros.LookupException, tf2_ros.ConnectivityException, tf2_ros.ExtrapolationException):
             
             rospy.loginfo("Problem finding tag")
             pass
-        #except AttributeError:
-        #    rospy.loginfo("State not detected")
-        #    pass
+
 
         return None 
 
     def main(self):
-        hm.HelloNode.main(self, 'arucoFollow', 'arucoFollow', wait_for_first_pointcloud=False)
-
         self.r = rospy.Rate(rospy.get_param('~rate', 10.0))
 
-        
 
         self.static_broadcaster = tf2_ros.StaticTransformBroadcaster()
         self.tf_buffer = tf2_ros.Buffer()
         self.tf_listener = tf2_ros.TransformListener(self.tf_buffer)
 
 
-        self.switch_to_position_mode = rospy.ServiceProxy('/switch_to_position_mode', Trigger)
-        self.switch_to_navigation_mode = rospy.ServiceProxy('/switch_to_navigation_mode', Trigger)
+        
         rate = rospy.Rate(10) # 10hz
         while not rospy.is_shutdown():
             self.find_tag()
@@ -120,6 +119,7 @@ class ArucoNavigationNode(hm.HelloNode):
 if __name__ == '__main__':
         
     try:
+        rospy.init_node("Aruco Info")
         node = ArucoNavigationNode()
         node.main()
 
