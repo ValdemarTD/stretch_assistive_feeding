@@ -17,13 +17,13 @@ import numpy as np
 class ArucoNavigationNode():
     def __init__(self):
 
-        super().__init__()
+        #super().__init__()
 
         self.follow_tag_subscriber = rospy.Subscriber(
             "tag_name", String, self.follow_tag_callback
         )
 
-        self.stored_tag_name = "None"
+        self.stored_tag_name = "link_wrist_yaw_bottom"
 
 
         #Controls how many duplicates it will tolerate before defaulting
@@ -69,7 +69,7 @@ class ArucoNavigationNode():
                 self.last_transform = base_to_tag.transform
             else:
                 self.count +=1
-                if self.count >= 20:
+                if self.count >= 100:
                     # The tf is old; ignore it
                     self.cam_to_tag_angle = -math.pi/4
                     self.base_to_tag_angle = 0
@@ -81,8 +81,7 @@ class ArucoNavigationNode():
             self.cam_to_tag_angle_publisher.publish(self.cam_to_tag_angle)
             self.base_to_tag_angle_publisher.publish(self.base_to_tag_angle)
             self.base_to_tag_distance_publisher.publish(self.base_to_tag_distance)
-            self.search_flag_publisher.publish(0)
-            rospy.loginfo(self.cam_to_tag_angle, self.base_to_tag_angle)
+            #rospy.loginfo(self.cam_to_tag_angle, self.base_to_tag_angle)
 
     def find_tag(self):
         '''  
@@ -91,6 +90,7 @@ class ArucoNavigationNode():
         #Check if tag is in view
         try:
             tag_name = self.stored_tag_name
+            print(tag_name)
             self.handleTransforms(tag_name)
         #Tag not found
         except (tf2_ros.LookupException, tf2_ros.ConnectivityException, tf2_ros.ExtrapolationException):
@@ -119,7 +119,7 @@ class ArucoNavigationNode():
 if __name__ == '__main__':
         
     try:
-        rospy.init_node("Aruco Info")
+        rospy.init_node("Aruco_Info")
         node = ArucoNavigationNode()
         node.main()
 

@@ -1,10 +1,12 @@
-import hello_helpers.misc as hm
+import hello_helpers.hello_misc as hm
 import multipoint_command as mc
 import rospy
+import numpy as np
 
 from std_msgs.msg import String
+from sensor_msgs.msg import JointState
 
-import ik_solver
+#import ik_solver
 
 #Test
 class ActionLibrary(mc.MultiPointCommand):
@@ -15,11 +17,14 @@ class ActionLibrary(mc.MultiPointCommand):
         :param self: The self reference.
         """
         super().__init__()
-        self.ik = ik_solver.IKSolver()
+        hm.HelloNode.main(self, 'multipoint_command', 'multipoint_command', wait_for_first_pointcloud=False)
+        #self.ik = ik_solver.IKSolver()
+        self.joint_states = None
         self.relevant_joints = ['wrist_extension', 'joint_lift', 'joint_wrist_yaw']
 
 
         #Subscribers and publishers
+        self.sub = rospy.Subscriber('joint_states', JointState, self.callback)
         self.tag_publisher = rospy.Publisher(
             "tag_name", String, queue_size=1
         )
@@ -27,15 +32,18 @@ class ActionLibrary(mc.MultiPointCommand):
         self.tag_publisher.publish("None")
         
     
-    def turnRight():
+    def turnRight(self):
         "Rotates CCW 90 degrees"
+        self.tag_publisher.publish("base_right")
+        self.move_to_pose({'rotate_mobile_base':-np.pi/2})
 
-        pass
 
-    def turnLeft():
-        #self.
-        #self.move_to_pose('rotate_base')
-        pass 
+    def turnLeft(self):
+        """Rotaates CW 90 degrees"""
+        self.move_to_pose({'joint_head_tilt':-1.8})
+        self.tag_publisher.publish("base_left")
+        self.move_to_pose({'rotate_mobile_base':np.pi/2})
+
 
     def toggleGripper(self, open):
         "Open/Close Gripper, [open] = false is close, reverse is true"
@@ -53,6 +61,7 @@ class ActionLibrary(mc.MultiPointCommand):
 
         Return: True if valid and successful, False otherwise
         """
+        rospy.loginfo("test???")
         self.jointMovement(min= 0.2, max= 1, joint_name='joint_lift', magnitude=magnitude, direction=direction)
 
 
@@ -62,29 +71,63 @@ class ActionLibrary(mc.MultiPointCommand):
         
         Return: True if valid and successful, False otherwise
         """
+        self.tag_publisher.publish("link_wrist_yaw_bottom")
         self.jointMovement(min=0, max=0.5, joint_name='wrist_extension',magnitude=magnitude, direction=direction)
+        self.tag_publisher.publish("None")
 
 
-    def ik(self, goal):
-        #Raw ik move
-        """
-        Input: goal is a [x,y,z] position from base_link
+#    def ik(self, goal):
+#        #Raw ik move
+#        """
+#        Input: goal is a [x,y,z] position from base_link
 
-        Return: True if successful , false otherwise
-        """
-        joint_config = self.ik.goTo(goal)
-        self.move_to_pose(joint_config)
-        return True 
+#        Return: True if successful , false otherwise
+#       """
+#        joint_config = self.ik.goTo(goal)
+#        self.move_to_pose(joint_config)
+#        return True 
         
 
     def delivery(self):
         #Some trajectory command later
-        pass 
+        self.issue_multipoint_command([[0.25, 0.93, 0, 0,0]], accelerations=[1,1,1,1])
+        self.issue_multipoint_command([[0.25,0.9,0,0,-0.5], [0.25, 0.9, 0, 0.2,-0.4], [0.25, 0.9, 0 ,0.3,-0.3], [0.25, 0.9, 0 ,0,0], [0.25, 0.95, 0, 0.0,0],[0, 0.9, 2.5, 0,0]], velocities = [0.1,0.1,0.4,0.1, 0.3])
+        self.turnRight()
+        self.issue_multipoint_command([[0, 1.1, 2.5,0,0]], accelerations=[0.05,0.05,0.05,0.05,0])
+        self.issue_multipoint_command([[0.4,1.1,0,0,0]], accelerations=[0.05,0.05,0.5,0.5,0], velocities=[0.5,1,0.4, 0,0])
 
     def retrieveFood(self):
         #
         pass 
 
+
+    """
+    
+    def handleTransforms(self, tag_name):
+        
+        Gets transform vectors from aruco to base and aruco to camera, computes angle between them. Publishes transforms and camera angle needed
+        to center on aruco tag 
+        
+        # Get transforms from the tag to the camera and base
+        base_to_tag:TransformStamped = self.tf_buffer.lookup_transform('base_link', tag_name, rospy.Time(0))
+        
+        #Brian - There was a issue where it was more diffidult to get the angle while using the camera link as the source
+        cam_to_tag:TransformStamped = self.tf_buffer.lookup_transform('camera_link', tag_name, rospy.Time(0))
+
+        if (self.last_transform != base_to_tag.transform):
+            self.count =0
+            rospy.loginfo("Found Tag")
+            # Get angle between the tag and the camera
+            cam_hypotonuse = (cam_to_tag.transform.translation.x ** 2 + cam_to_tag.transform.translation.y ** 2) ** 0.5
+            self.cam_to_tag_angle = -math.acos(base_to_tag.transform.translation.x/cam_hypotonuse)
+            # Get angle between the tag and the base
+            self.base_to_tag_angle = math.atan2(base_to_tag.transform.translation.y, base_to_tag.transform.translation.x)
+            # Get distance between the tag and the base
+            self.base_to_tag_distance = (base_to_tag.transform.translation.x ** 2 + base_to_tag.transform.translation.y ** 2) ** 0.5
+            
+            self.last_transform = base_to_tag.transform
+
+    """
 
 
 
@@ -103,7 +146,7 @@ class ActionLibrary(mc.MultiPointCommand):
         if offset + joint_position > max or offset + joint_position < min:
             rospy.loginfo("Invalid parameters: Offset to large (>1) or too small (<0.2)")
             return False
-        self.move_to_pose({'joint_lift': joint_position + magnitude*direction})
+        self.move_to_pose({joint_name: joint_position + magnitude*direction})
         return True
 
 
@@ -131,3 +174,12 @@ class ActionLibrary(mc.MultiPointCommand):
             index = self.joint_states.name.index(joint)
             joint_positions[joint] = self.joint_states.position[index]
         return joint_positions
+    
+
+action = ActionLibrary()
+rospy.sleep(1)
+action.delivery()
+try:
+    rospy.spin()
+except:
+    rospy.loginfo("Bye")

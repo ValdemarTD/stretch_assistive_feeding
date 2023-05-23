@@ -1,7 +1,7 @@
 #! /usr/bin/env python3
 import rospy
 from std_srvs.srv import Trigger
-import hello_misc as hm
+import hello_helpers.hello_misc as hm
 
 # Import the FollowJointTrajectoryGoal from the control_msgs.msg package to
 # control the Stretch robot
@@ -26,7 +26,10 @@ class JointControl(hm.HelloNode):
         Create an instance of the simple navigation interface.
         :param self: The self reference.
         """
-        super().__init__()
+        hm.HelloNode.__init__(self)
+        hm.HelloNode.main(
+            self, "camera_follower", "camera_follower", wait_for_first_pointcloud=False
+        )
         self.joint_state = None
         self.last_camera_angle = -math.pi / 4
         self.last_pan_camera_angle = 0
@@ -49,20 +52,22 @@ class JointControl(hm.HelloNode):
         self.stored_tag_name = msg.data
 
     def pan_follower_callback(self, msg):
-        angle = 1 * msg.data
-        if abs(angle - self.last_camera_angle) > 0.5:
-            rospy.loginfo("Pan to %s radians", angle)
-            new_pose = {"joint_head_pan": angle}
-            self.move_to_pose(new_pose)
-        self.last_pan_camera_angle = angle
+        if self.stored_tag_name != "None":
+            angle = 1 * msg.data
+            if abs(angle - self.last_camera_angle) > 0.7:
+                rospy.loginfo("Pan to %s radians", angle)
+                new_pose = {"joint_head_pan": angle}
+                self.move_to_pose(new_pose)
+            self.last_pan_camera_angle = angle
 
     def camera_following_callback(self, msg):
-        angle = 1 * msg.data
-        if abs(angle - self.last_camera_angle) > 0.1:
-            rospy.loginfo("Tilt to %s radians", angle)
-            new_pose = {"joint_head_tilt": angle}
-            self.move_to_pose(new_pose)
-        self.last_camera_angle = angle
+        if self.stored_tag_name != "None":
+            angle = 1 * msg.data
+            if abs(angle - self.last_camera_angle) > 0.1:
+                rospy.loginfo("Tilt to %s radians", angle)
+                new_pose = {"joint_head_tilt": angle}
+                self.move_to_pose(new_pose)
+            self.last_camera_angle = angle
 
 
     def joint_states_callback(self, joint_state):
@@ -78,9 +83,6 @@ class JointControl(hm.HelloNode):
         :param self: The self reference.
         """
         # Setting up relevant nodes and subscribers
-        hm.HelloNode.main(
-            self, "camera_follower", "camera_follower", wait_for_first_pointcloud=False
-        )
         rospy.Subscriber(
             "/stretch/joint_states", JointState, self.joint_states_callback
         )
@@ -89,7 +91,7 @@ class JointControl(hm.HelloNode):
         min_pan = -4
         max_pan = 1.3
         delta = (max_pan - min_pan) / 5
-
+        rate = rospy.Rate(10)
         #if self.stored_tag_name is not 'None':
         """
         For sweeping: 
@@ -105,6 +107,7 @@ class JointControl(hm.HelloNode):
 
 
 if __name__ == "__main__":
+    #rospy.init_node("test")
     node = JointControl()
     node.main()
 
