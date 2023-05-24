@@ -1,15 +1,17 @@
+#!/usr/bin/env python
+
 import cv2
 import rospy
 from sensor_msgs.msg import Image
 from cv_bridge import CvBridge
 
 
-class MouthDetection():
-    def init(self):
+class MouthDetection:
+    def __init__(self):
         # TODO: CHANGE THIS
-        self.smile_cascade = cv2.CascadeClassifier('/home/ramya/my-workspace/src/stretch_assistive_feeding/scripts/haarcascade_smile.xml')
+        self.smile_cascade = cv2.CascadeClassifier('/home/hello-robot/catkin_ws/src/stretch_assistive_feeding/scripts/haarcascade_smile.xml')
         self.vid_subscriber = rospy.Subscriber('camera/color/image_raw', Image, self.camera_cb)
-        self.vid_publisher = rospy.Publisher('camera/color/image_raw', Image, queue_size=3)
+        self.vid_publisher = rospy.Publisher('camera/color/image_detected', Image, queue_size=3)
         self.vid_bridge = CvBridge()
 
     def camera_cb(self, im):
@@ -32,4 +34,6 @@ class MouthDetection():
 if __name__ == '__main__':
     print("hi zac")
     rospy.init_node("face", anonymous=True)
+    md = MouthDetection()
+    print("Detection initialized")
     rospy.spin()
