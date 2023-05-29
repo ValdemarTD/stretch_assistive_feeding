@@ -32,7 +32,7 @@ class MultiPointCommand(hm.HelloNode):
 			if velocities is not None:
 				trajectory.velocities = velocities
 			if accelerations is None:
-				trajectory.accelerations = [4,4,4,4,4]
+				pass
 			else:
 				trajectory.accelerations = accelerations
 			converted_shape.append(trajectory)
@@ -66,6 +66,32 @@ class MultiPointCommand(hm.HelloNode):
 		self.trajectory_client.wait_for_result()
 
 
+	def single_joint(self, joint_name, points, velcoities= None, accelerations = None):
+		trajectory_goal = FollowJointTrajectoryGoal()
+		trajectory_goal.trajectory.joint_names = [joint_name]
+		# Then trajectory_goal.trajectory.points is defined by a list of the joint
+		
+		traj_points = []
+		for point in points:
+			trajectory = JointTrajectoryPoint()
+			trajectory.positions = [point]
+			if accelerations is not None:
+				trajectory.accelerations = accelerations
+			if velcoities is not None:
+				trajectory.velocities = velcoities
+			traj_points.append(trajectory)
+
+		trajectory_goal.trajectory.points = traj_points
+
+		# Specify the coordinate frame that we want (base_link) and set the time to be now
+		trajectory_goal.trajectory.header.stamp = rospy.Time(0.0)
+		trajectory_goal.trajectory.header.frame_id = 'base_link'
+
+		# Make the action call and send the goal. The last line of code waits
+		# for the result before it exits the python script
+		self.trajectory_client.send_goal(trajectory_goal)
+		rospy.loginfo('Sent list of goals = {0}'.format(trajectory_goal))
+		self.trajectory_client.wait_for_result()
 	
 
 

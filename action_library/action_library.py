@@ -2,9 +2,12 @@ import hello_helpers.hello_misc as hm
 import multipoint_command as mc
 import rospy
 import numpy as np
-
+import math
+import threading
 from std_msgs.msg import String
 from sensor_msgs.msg import JointState
+from geometry_msgs.msg import TransformStamped, Transform
+import tf2_ros
 
 #import ik_solver
 
@@ -30,6 +33,15 @@ class ActionLibrary(mc.MultiPointCommand):
         )
 
         self.tag_publisher.publish("None")
+
+        self.static_broadcaster = tf2_ros.StaticTransformBroadcaster()
+        self.tf_buffer = tf2_ros.Buffer()
+        self.tf_listener = tf2_ros.TransformListener(self.tf_buffer)
+
+        #Initial Camera Data
+        self.last_camera_angle = -math.pi / 4
+        self.last_pan_camera_angle = 0
+
         
     
     def turnRight(self):
@@ -88,46 +100,66 @@ class ActionLibrary(mc.MultiPointCommand):
 #        return True 
         
 
-    def delivery(self):
-        #Some trajectory command later
-        self.issue_multipoint_command([[0.25, 0.93, 0, 0,0]], accelerations=[1,1,1,1])
-        self.issue_multipoint_command([[0.25,0.9,0,0,-0.5], [0.25, 0.9, 0, 0.2,-0.4], [0.25, 0.9, 0 ,0.3,-0.3], [0.25, 0.9, 0 ,0,0], [0.25, 0.95, 0, 0.0,0],[0, 0.9, 2.5, 0,0]], velocities = [0.1,0.1,0.4,0.1, 0.3])
-        self.turnRight()
+    def deliveryMotion(self):
+        "WIP Full grasp + delivery motion"
         self.issue_multipoint_command([[0, 1.1, 2.5,0,0]], accelerations=[0.05,0.05,0.05,0.05,0])
         self.issue_multipoint_command([[0.4,1.1,0,0,0]], accelerations=[0.05,0.05,0.5,0.5,0], velocities=[0.5,1,0.4, 0,0])
 
+
     def retrieveFood(self):
-        #
-        pass 
+        self.issue_multipoint_command([[0.25, 0.93, 0, 0,0]], accelerations=[1,1,1,1])
+        self.issue_multipoint_command([[0.25,0.9,0,0,-0.5], [0.25, 0.9, 0, 0.2,-0.4], [0.25, 0.9, 0 ,0.3,-0.3], [0.25, 0.9, 0 ,0,0], 
+                                       [0.25, 0.95, 0, 0.0,0],[0, 0.9, 2.5, 0,0]], velocities = [0.1,0.1,0.4,0.1, 0.3])
+        
+
+    def fullRetrieveAndDeliver(self):
+        self.retrieveFood()
+        self.turnRight()
+        self.deliveryMotion()
+        
+
+    def mockIK(self):
+        self.issue_multipoint_command([[0.4, 0.9, 0, 0,0],[0,0.95,2.5,0,0]])
+        self.turnRight()
+        self.issue_multipoint_command([[0.4,1.1,0,0,0]])
 
 
-    """
+  
     
     def handleTransforms(self, tag_name):
-        
+        """
         Gets transform vectors from aruco to base and aruco to camera, computes angle between them. Publishes transforms and camera angle needed
         to center on aruco tag 
-        
-        # Get transforms from the tag to the camera and base
-        base_to_tag:TransformStamped = self.tf_buffer.lookup_transform('base_link', tag_name, rospy.Time(0))
-        
-        #Brian - There was a issue where it was more diffidult to get the angle while using the camera link as the source
-        cam_to_tag:TransformStamped = self.tf_buffer.lookup_transform('camera_link', tag_name, rospy.Time(0))
+        """
+        try:
+            # Get transforms from the tag to the camera and base
+            base_to_tag:TransformStamped = self.tf_buffer.lookup_transform('base_link', tag_name, rospy.Time(0))
+            
+            #Brian - There was a issue where it was more diffidult to get the angle while using the camera link as the source
+            cam_to_tag:TransformStamped = self.tf_buffer.lookup_transform( 'camera_link',tag_name, rospy.Time(0))
 
-        if (self.last_transform != base_to_tag.transform):
+            print("x",cam_to_tag.transform.translation.x, "y",cam_to_tag.transform.translation.y,"z", cam_to_tag.transform.translation.z)
             self.count =0
-            rospy.loginfo("Found Tag")
             # Get angle between the tag and the camera
             cam_hypotonuse = (cam_to_tag.transform.translation.x ** 2 + cam_to_tag.transform.translation.y ** 2) ** 0.5
+       
             self.cam_to_tag_angle = -math.acos(base_to_tag.transform.translation.x/cam_hypotonuse)
+   
             # Get angle between the tag and the base
             self.base_to_tag_angle = math.atan2(base_to_tag.transform.translation.y, base_to_tag.transform.translation.x)
+           
             # Get distance between the tag and the base
             self.base_to_tag_distance = (base_to_tag.transform.translation.x ** 2 + base_to_tag.transform.translation.y ** 2) ** 0.5
             
             self.last_transform = base_to_tag.transform
+          
+            print(self.cam_to_tag_angle, self.base_to_tag_angle)
+            rospy.loginfo("Success")
+            return True
+        except:
+            rospy.loginfo("Transformm not found?")
+            return False
 
-    """
 
 
 
@@ -149,6 +181,10 @@ class ActionLibrary(mc.MultiPointCommand):
         self.move_to_pose({joint_name: joint_position + magnitude*direction})
         return True
 
+    def test_camera(self):
+        self.single_joint('joint_head_tilt', [0,-1,0], accelerations=[4])
+        self.single_joint()
+        
 
     #Move Later
     def callback(self, msg):
@@ -176,9 +212,44 @@ class ActionLibrary(mc.MultiPointCommand):
         return joint_positions
     
 
+    ##CAMERA SPECIFIC METHODS
+    def _pan_follower_callback(self, angle):
+        #if abs(angle - self.last_camera_angle) > 0.1:
+        print(angle)
+        new_pose = {"joint_head_pan": angle}
+        self.single_joint('joint_head_pan',points=[angle])
+        self.last_pan_camera_angle = angle
+
+    def _camera_following_callback(self, angle):
+        angle += np.pi/8
+        new_pose = {"joint_head_tilt": angle}
+        self.single_joint('joint_head_tilt', points=[angle])
+        self.last_camera_angle = angle
+    
+    def followTfCamera(self):
+        rate = rospy.Rate(10) # 10hz
+        print("are we doing anything")
+        while not rospy.is_shutdown():
+            result = self.handleTransforms("utensil_end")
+            if result:    
+                self._camera_following_callback(self.cam_to_tag_angle)
+                self._pan_follower_callback(self.base_to_tag_angle)
+            rate.sleep()
+
+    def testing(self):
+        self.move_to_pose({"joint_lift":0.5, "wrist_extension":0, "wrist_yaw":2.5})
+
 action = ActionLibrary()
-rospy.sleep(1)
-action.delivery()
+#rospy.sleep(1)
+
+x = threading.Thread(target=action.move_to_pose({"joint_lift":1.1, 'wrist_extension': 0},return_before_done = True))
+y = threading.Thread(target=action.followTfCamera())
+#x.start()
+#print("starting y")
+y.start()
+#rospy.sleep(2)
+#action.test_camera()
+#action.move_to_pose({"wrist_extension":0.5}, return_before_done = True)
 try:
     rospy.spin()
 except:
