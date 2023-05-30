@@ -1,6 +1,7 @@
 import cv2
 import rospy
 from sensor_msgs.msg import Image
+from geometry_msgs.msg import Point
 from cv_bridge import CvBridge
 
 class MouthDetection_withcrop():
@@ -10,6 +11,7 @@ class MouthDetection_withcrop():
         self.vid_subscriber = rospy.Subscriber('camera/color/image_raw', Image, self.camera_cb)
         self.vid_publisher = rospy.Publisher('camera/color/image_detected', Image, queue_size=3)
         self.vid_bridge = CvBridge()
+        self.mouth_publisher = rospy.Publisher('mouth_point', Point)
 
     def camera_cb(self, im):
         frame = cv2.rotate(self.vid_bridge.imgmsg_to_cv2(im), cv2.ROTATE_90_CLOCKWISE)
@@ -37,6 +39,10 @@ class MouthDetection_withcrop():
                 break
         im_msg = self.vid_bridge.cv2_to_imgmsg(frame)
         self.vid_publisher.publish(im_msg)
+        mouth_pt = Point()
+        mouth_pt.x = int(x1+0.5*w1)
+        mouth_pt.y = y1
+        self.mouth_publisher.publish(mouth_pt)
 
 if __name__ == '__main__':
     print("hi zac2: electric boogaloo")
