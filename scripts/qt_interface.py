@@ -22,26 +22,39 @@ class NavigationController():
         self.areas = [
             {
                 "geometry" : shapely.Polygon([(0, 0), (0.5, 0.5), (1, 0)]),
-                "callback" : self.go_forwards
+                "callback" : self.go_forwards,
+                "mouseover": self.mouseover_forwards
             },
             {
                 "geometry" : shapely.Polygon([(0, 1), (0.5, 0.5), (1, 1)]),
-                "callback" : self.go_backwards
+                "callback" : self.go_backwards,
+                "mouseover": self.mouseover_backwards
             },
             {
                 "geometry" : shapely.Polygon([(0, 0), (0.5, 0.5), (0, 1)]),
-                "callback" : self.turn_left
+                "callback" : self.turn_left,
+                "mouseover": self.mouseover_left
             },
             {
                 "geometry" : shapely.Polygon([(1, 0), (0.5, 0.5), (1, 1)]),
-                "callback" : self.turn_right
+                "callback" : self.turn_right,
+                "mouseover": self.mouseover_right
             }
         ]
         self.parent = parent
         self.move_publisher = rospy.Publisher("/stretch_diff_drive_controller/cmd_vel", Twist, queue_size=5)
 
     def mouseover_event(self, event):
-        pass
+        return
+        """dimensions = self.parent.image_frame.frameGeometry()
+        norm_x = event.x() / dimensions.width()
+        norm_y = event.y() / dimensions.height()
+
+        point = shapely.Point((norm_x, norm_y))
+
+        for area in self.areas:
+            if area["geometry"].contains(point):
+                area["mouseover"]()"""
 
     def click_event(self, event):
         dimensions = self.parent.image_frame.frameGeometry()
@@ -67,7 +80,6 @@ class NavigationController():
         time.sleep(0.20)
         msg.linear.x = 0
         self.move_publisher.publish(msg)
-        print("Go forwards")
 
     def go_backwards(self):
         msg = Twist()
@@ -81,7 +93,6 @@ class NavigationController():
         time.sleep(0.20)
         msg.linear.x = 0
         self.move_publisher.publish(msg)
-        print("Go backwards")
     
     def turn_left(self):
         msg = Twist()
@@ -95,7 +106,6 @@ class NavigationController():
         time.sleep(0.20)
         msg.angular.z = 0
         self.move_publisher.publish(msg)
-        print("Turn left")
 
     def turn_right(self):
         msg = Twist()
@@ -109,7 +119,6 @@ class NavigationController():
         time.sleep(0.20)
         msg.angular.z = 0
         self.move_publisher.publish(msg)
-        print("Turn right")
 
     def mouseover_forwards(self):
         print("Mouseover forwards")
@@ -380,6 +389,7 @@ class DisplayImageWidget(QWidget):
         }
 
         self.image_frame.mousePressEvent = self.click_event
+        self.setAttribute(QtCore.Qt.WA_Hover)
         #self.image_frame.mouseMoveEvent = self.mouseover_event
 
 
@@ -404,13 +414,26 @@ class DisplayImageWidget(QWidget):
             self.available_modes[self.mode]["controller"].click_event(event)
 
     def only_show_image(self, cv_image):
+        cv_image = self.draw_shapes(cv_image)
         self.show_image(QtGui.QImage(cv_image.data, cv_image.shape[1], cv_image.shape[0], QtGui.QImage.Format_RGB888))
 
     def show_navigation(self, cv_image):
-        #cv_image = self.draw_shapes(cv_image, )
+        cv_image = self.draw_shapes(cv_image)
         self.show_image(QtGui.QImage(cv_image.data, cv_image.shape[1], cv_image.shape[0], QtGui.QImage.Format_RGB888))
 
     def draw_shapes(self, cv_image):
+        overlay = cv_image.copy()
+        alpha = 0.5
+        dimensions = self.image_frame.frameGeometry()
+        w = dimensions.width()
+        h = dimensions.height()
+        for area in self.available_modes[self.mode]["controller"].areas:
+            points = area["geometry"].exterior.coords
+            for i in range(len(points)-1):
+                p1 = points[i+1]
+                p2 = points[i]
+                cv2.line(overlay, (int(p1[0]*w), int(p1[1]*h)), (int(p2[0]*w), int(p2[1]*h)), (255, 255, 255), 4)
+        cv_image = cv2.addWeighted(overlay, alpha, cv_image, 1-alpha, 0)
         return cv_image
 
     def show_image_by_mode(self, cv_image):
