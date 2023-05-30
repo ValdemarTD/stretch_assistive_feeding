@@ -152,11 +152,11 @@ class CameraController():
                 "callback" : self.turn_right
             }
         ]
-        self.delt_vert = 0.25
-        self.delt_horiz = 0.25
+        self.delt_vert = 0.125
+        self.delt_horiz = 0.125
         self.parent = parent
         self.joint_states = None
-        self.head_client = actionlib.SimpleActionClient('/stretch_head_controller/follow_joint_trajectory', FollowJointTrajectoryAction)
+        self.head_client = actionlib.SimpleActionClient('/stretch_controller/follow_joint_trajectory', FollowJointTrajectoryAction)
         server_reached = self.head_client.wait_for_server(timeout=rospy.Duration(60.0))
         self.joints_subscriber = rospy.Subscriber('/joint_states', JointState, self.joint_states_cb)
         #self.head_publisher = rospy.Publisher("/stretch/cmd_vel", Twist, queue_size=5)
@@ -251,11 +251,11 @@ class ArmController():
                 "callback" : self.retract
             }
         ]
-        self.delt_vert = 0.1
-        self.delt_horiz = 0.06
+        self.delt_vert = 0.05
+        self.delt_horiz = 0.05
         self.parent = parent
         self.joint_states = None
-        self.arm_client = actionlib.SimpleActionClient('/stretch_arm_controller/follow_joint_trajectory', FollowJointTrajectoryAction)
+        self.arm_client = actionlib.SimpleActionClient('/stretch_controller/follow_joint_trajectory', FollowJointTrajectoryAction)
         server_reached = self.arm_client.wait_for_server(timeout=rospy.Duration(60.0))
         self.joints_subscriber = rospy.Subscriber('/joint_states', JointState, self.joint_states_cb)
         #self.head_publisher = rospy.Publisher("/stretch/cmd_vel", Twist, queue_size=5)
@@ -523,7 +523,7 @@ class MainWindow(QMainWindow):
 
 
     def camera_cb(self, data):
-        cv_image = cv2.rotate(cv2.cvtColor(self.vid_bridge.imgmsg_to_cv2(data), cv2.COLOR_BGR2RGB), cv2.ROTATE_90_CLOCKWISE)
+        cv_image = cv2.rotate(self.vid_bridge.imgmsg_to_cv2(data), cv2.ROTATE_90_CLOCKWISE)
         self.vid_widget.show_image_by_mode(cv_image)
 
 
