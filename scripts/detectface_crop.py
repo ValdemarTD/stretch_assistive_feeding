@@ -19,7 +19,7 @@ class MouthDetection_withcrop():
         self.depth_subscriber = rospy.Subscriber('camera/depth/color/points', PointCloud2, self.depth_cb)
         self.vid_publisher = rospy.Publisher('camera/color/image_detected', Image, queue_size=3)
         self.vid_bridge = CvBridge()
-        self.mouth_publisher = rospy.Publisher('mouth_point', Point, queue_size=3)
+        self.mouth_publisher = rospy.Publisher('mouth_point', PointStamped, queue_size=3)
         self.mouth_point = None
         self.mouth_lock = Lock()
 
@@ -47,15 +47,16 @@ class MouthDetection_withcrop():
             cv2.rectangle(frame, (0,0), (10, 10), (255, 0, 0), 3)
             mouth_rects = self.smile_cascade.detectMultiScale(face_frame, 1.1, 11)
             #cv2.rectangle(frame, (x,y), (x+w, y+h), (0, 0, 255), 3)
+
             for (x1,y1,w1,h1) in mouth_rects:
                 if not y1 < h/3:
-                    cv2.circle(frame, (int(x+x1+0.1*w1),int(y+y1+0.5*h1)), 3, (255,0,0), 3)
-                    cv2.circle(frame, (int(x+x1+0.9*w1),int(y+y1+0.5*h1)), 3, (0,255,0), 3)
-                    point_y = 720 - (x+x1+0.5*w1)
-                    point_x = y+y1+0.5*h1
+                    cv2.circle(frame, (int(x+x1+0.1*w1),int(y+y1)), 3, (255,0,0), 3)
+                    cv2.circle(frame, (int(x+x1+0.9*w1),int(y+y1)), 3, (0,255,0), 3)
+                    point_y = 2*(frame.shape[1] - (x+x1+0.5*w1))
+                    point_x = 2*(y+y1)
                 break
         if not self.mouth_point == None:
-            cv2.circle(frame, (self.mouth_point.x, self.mouth_point.y), 3, (128, 0, 255), 3)
+            cv2.circle(frame, (frame.shape[1] - int(self.mouth_point.y/2), int(self.mouth_point.x/2)), 3, (100, 0, 255), 3)
         im_msg = self.vid_bridge.cv2_to_imgmsg(frame)
         self.vid_publisher.publish(im_msg)
         if point_x == None or point_y == None:
@@ -65,7 +66,6 @@ class MouthDetection_withcrop():
         self.mouth_point.x = int(point_x)
         self.mouth_point.y = int(point_y)
         self.mouth_point.z = -1
-        #self.mouth_publisher.publish(self.mouth_point)
         self.mouth_lock.release()
 
     def depth_cb(self, pc):
@@ -77,20 +77,37 @@ class MouthDetection_withcrop():
         x = self.mouth_point.x
         y = self.mouth_point.y
         self.mouth_lock.release()
+        print(x, y)
+        
         unit_vec = self.cam_model.projectPixelTo3dRay((x,y))
         start = time.time()
         cloud_arr = rnp.point_cloud2.pointcloud2_to_xyz_array(pc)
         mid = time.time()
         lengths_arr = np.sqrt(np.einsum('...i,...i', cloud_arr, cloud_arr))
-        uvec_arr = np.divide(cloud_arr, [lengths_arr, lengths_arr, lengths_arr])
+        uvec_arr = np.divide(cloud_arr, np.transpose(np.array([lengths_arr, lengths_arr, lengths_arr])))
         
+        uvec_time = time.time()
 
-        #uvec_arr = np.apply_along_axis(lambda lvar: lvar/(lvar**2).sum()**0.5, 1, cloud_arr)
+        diff_units_arr = uvec_arr - unit_vec
+        diffs_arr = np.sqrt(np.einsum('...i,...i', diff_units_arr, diff_units_arr))
+
         end = time.time()
 
+        nearest_point = cloud_arr[np.argmin(diffs_arr)]
+        point_msg = PointStamped()
+        point_msg.point.x = nearest_point[0]
+        point_msg.point.y = nearest_point[1]
+        point_msg.point.z = nearest_point[2]
+        point_msg.header.frame_id = pc.header.frame_id
+        self.mouth_publisher.publish(point_msg)
+
+
         print(f"Cloud conversion took {mid - start}s")
-        print(f"uvec array creation took {end - mid}s")
-        print(uvec_arr)
+        print(f"uvec array creation took {uvec_time - mid}s")
+        print(f"Diffs array creation took {end - uvec_time}s")
+        print(diffs_arr)
+        print(np.min(diffs_arr))
+        print(cloud_arr[np.argmin(diffs_arr)])
 
         #print(uvec_arr)
         #print(np.apply_along_axis(np.linalg.norm, 0, cloud_arr))
