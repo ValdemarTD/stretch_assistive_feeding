@@ -16,12 +16,12 @@ class PointFilter():
         self.threshold = 10
         self.maximum = 30
 
-        Rx = 0.1
-        Ry = 0.1
+        Rx = 0.25
+        Ry = 0.25
         Rz = 0.1
-        Qx = 0.05
-        Qy = 0.05
-        Qz = 0.05
+        Qx = 0.03
+        Qy = 0.03
+        Qz = 0.15
         
         self.R = np.array([[Rx], [Ry], [Rz], [0]])
         self.Q = np.array([[Qx], [Qy], [Qz], [0]])
@@ -36,7 +36,6 @@ class PointFilter():
     def correct_point(self, measurement, index):
         K = np.divide(self.P_vals[index], self.P_vals[index] + self.R)
         self.estimates[index] = self.estimates[index] + K * (measurement - self.estimates[index])
-        print(self.estimates[index])
         self.P_vals[index] = np.multiply((-K + 1), self.P_vals[index])
         self.P_vals[index][3] = 1
 
@@ -146,7 +145,8 @@ class MouthDetection_withcrop():
 
         end = time.time()
 
-        nearest_point = cloud_arr[np.argmin(diffs_arr)]
+        #nearest_point = cloud_arr[np.argmin(diffs_arr)]
+        nearest_point = (lengths_arr[np.argmin(diffs_arr)] - 0.075) * uvec_arr[np.argmin(diffs_arr)]
 
         nearest_point = self.kalman_filter.filter(nearest_point)
 
