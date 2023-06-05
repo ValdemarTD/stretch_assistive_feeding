@@ -11,6 +11,58 @@ from image_geometry import PinholeCameraModel
 from cv_bridge import CvBridge
 from threading import Lock
 
+class PointFilter():
+    def __init__(self):
+        self.threshold = 10
+        self.maximum = 30
+
+        Rx = 0.1
+        Ry = 0.1
+        Rz = 0.1
+        Qx = 0.05
+        Qy = 0.05
+        Qz = 0.05
+        
+        self.R = np.array([[Rx], [Ry], [Rz], [0]])
+        self.Q = np.array([[Qx], [Qy], [Qz], [0]])
+        self.P_vals = []
+        self.estimates = []
+
+    def predict_point(self, measurement, index):
+        #Note: Mostly doing this in case we need to make adjustments to the estimate later
+        #self.estimates[i] = self.estimates[i]
+        self.P_vals[index] = self.P_vals[index] + self.Q
+
+    def correct_point(self, measurement, index):
+        K = np.divide(self.P_vals[index], self.P_vals[index] + self.R)
+        self.estimates[index] = self.estimates[index] + K * (measurement - self.estimates[index])
+        print(self.estimates[index])
+        self.P_vals[index] = np.multiply((-K + 1), self.P_vals[index])
+        self.P_vals[index][3] = 1
+
+    def predict(self, measurement):
+        for i in range(len(self.estimates)):
+            self.predict_point(measurement, i)
+        
+
+    def correct(self, measurement):
+        for i in range(len(self.estimates)):
+            self.correct_point(measurement, i)
+
+    def consolidate_estimates(self):
+        pass
+
+    def filter(self, measurement):
+        if len(self.estimates) == 0:
+            self.estimates.append(np.array([[measurement[0]],[measurement[1]],[measurement[2]],[1]]))
+            self.P_vals.append(np.array([[1],[1],[1],[1]]))
+        
+        self.predict(np.array([[measurement[0]],[measurement[1]],[measurement[2]],[1]]))
+        self.correct(np.array([[measurement[0]],[measurement[1]],[measurement[2]],[1]]))
+
+        return self.estimates[0]
+
+
 class MouthDetection_withcrop():
     def __init__(self):
         self.face_cascade = cv2.CascadeClassifier('/home/hello-robot/catkin_ws/src/stretch_assistive_feeding/scripts/haarcascade_frontalface_default.xml')
@@ -25,6 +77,8 @@ class MouthDetection_withcrop():
 
         self.cam_model = PinholeCameraModel()
         self.cam_model.fromCameraInfo(rospy.wait_for_message("camera/depth/camera_info", CameraInfo))
+
+        self.kalman_filter = PointFilter()
 
     def camera_cb(self, im):
         frame = cv2.rotate(cv2.cvtColor(self.vid_bridge.imgmsg_to_cv2(im), cv2.COLOR_BGR2RGB), cv2.ROTATE_90_CLOCKWISE)
@@ -77,7 +131,6 @@ class MouthDetection_withcrop():
         x = self.mouth_point.x
         y = self.mouth_point.y
         self.mouth_lock.release()
-        print(x, y)
         
         unit_vec = self.cam_model.projectPixelTo3dRay((x,y))
         start = time.time()
@@ -94,6 +147,9 @@ class MouthDetection_withcrop():
         end = time.time()
 
         nearest_point = cloud_arr[np.argmin(diffs_arr)]
+
+        nearest_point = self.kalman_filter.filter(nearest_point)
+
         point_msg = PointStamped()
         point_msg.point.x = nearest_point[0]
         point_msg.point.y = nearest_point[1]
@@ -102,12 +158,12 @@ class MouthDetection_withcrop():
         self.mouth_publisher.publish(point_msg)
 
 
-        print(f"Cloud conversion took {mid - start}s")
+        """print(f"Cloud conversion took {mid - start}s")
         print(f"uvec array creation took {uvec_time - mid}s")
         print(f"Diffs array creation took {end - uvec_time}s")
         print(diffs_arr)
         print(np.min(diffs_arr))
-        print(cloud_arr[np.argmin(diffs_arr)])
+        print(cloud_arr[np.argmin(diffs_arr)])"""
 
         #print(uvec_arr)
         #print(np.apply_along_axis(np.linalg.norm, 0, cloud_arr))
