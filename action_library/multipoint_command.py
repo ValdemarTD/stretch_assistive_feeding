@@ -3,6 +3,7 @@
 # control the Stretch robot
 import rospy
 from control_msgs.msg import FollowJointTrajectoryGoal
+import time
 
 
 # Import JointTrajectoryPoint from the trajectory_msgs package to define
@@ -62,8 +63,9 @@ class MultiPointCommand(hm.HelloNode):
 		# Make the action call and send the goal. The last line of code waits
 		# for the result before it exits the python script
 		self.trajectory_client.send_goal(trajectory_goal)
-		rospy.loginfo('Sent list of goals = {0}'.format(trajectory_goal))
+		#rospy.loginfo('Sent list of goals = {0}'.format(trajectory_goal))
 		self.trajectory_client.wait_for_result()
+		
 
 
 	def single_joint(self, joint_name, points, velcoities= None, accelerations = None):
@@ -91,7 +93,8 @@ class MultiPointCommand(hm.HelloNode):
 		# for the result before it exits the python script
 		self.trajectory_client.send_goal(trajectory_goal)
 		rospy.loginfo('Sent list of goals = {0}'.format(trajectory_goal))
-		self.trajectory_client.wait_for_result()
+		#self.trajectory_client.wait_for_result()
+		#time.sleep()
 	
 
 

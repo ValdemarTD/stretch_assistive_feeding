@@ -8,7 +8,7 @@ from std_msgs.msg import String
 from sensor_msgs.msg import JointState
 from geometry_msgs.msg import TransformStamped, Transform
 import tf2_ros
-
+import time 
 #import ik_solver
 
 #Test
@@ -28,11 +28,9 @@ class ActionLibrary(mc.MultiPointCommand):
 
         #Subscribers and publishers
         self.sub = rospy.Subscriber('joint_states', JointState, self.callback)
-        self.tag_publisher = rospy.Publisher(
-            "tag_name", String, queue_size=1
-        )
+        self.follow_point = None
 
-        self.tag_publisher.publish("None")
+    
 
         self.static_broadcaster = tf2_ros.StaticTransformBroadcaster()
         self.tf_buffer = tf2_ros.Buffer()
@@ -46,15 +44,17 @@ class ActionLibrary(mc.MultiPointCommand):
     
     def turnRight(self):
         "Rotates CCW 90 degrees"
-        self.tag_publisher.publish("base_right")
+        self.follow_point = "base_right"
         self.move_to_pose({'rotate_mobile_base':-np.pi/2})
+        self.follow_point = None 
 
 
     def turnLeft(self):
         """Rotaates CW 90 degrees"""
-        self.move_to_pose({'joint_head_tilt':-1.8})
-        self.tag_publisher.publish("base_left")
+        
+        self.follow_point = "base_left"
         self.move_to_pose({'rotate_mobile_base':np.pi/2})
+        self.follow_point = None 
 
 
     def toggleGripper(self, open):
@@ -73,7 +73,6 @@ class ActionLibrary(mc.MultiPointCommand):
 
         Return: True if valid and successful, False otherwise
         """
-        rospy.loginfo("test???")
         self.jointMovement(min= 0.2, max= 1, joint_name='joint_lift', magnitude=magnitude, direction=direction)
 
 
@@ -100,10 +99,13 @@ class ActionLibrary(mc.MultiPointCommand):
 #        return True 
         
 
-    def deliveryMotion(self):
+    def deliveryMotion(self, single):
         "WIP Full grasp + delivery motion"
+        if single: 
+            self.follow_point = "utensil_end"
         self.issue_multipoint_command([[0, 1.1, 2.5,0,0]], accelerations=[0.05,0.05,0.05,0.05,0])
         self.issue_multipoint_command([[0.4,1.1,0,0,0]], accelerations=[0.05,0.05,0.5,0.5,0], velocities=[0.5,1,0.4, 0,0])
+
 
 
     def retrieveFood(self):
@@ -113,9 +115,13 @@ class ActionLibrary(mc.MultiPointCommand):
         
 
     def fullRetrieveAndDeliver(self):
+        self.follow_point = "utensil_end"
         self.retrieveFood()
         self.turnRight()
-        self.deliveryMotion()
+        #self.follow_point = "utensil_end"
+        rospy.sleep(2)
+        self.deliveryMotion(False)
+        #self.follow_point = None 
         
 
     def mockIK(self):
@@ -153,8 +159,8 @@ class ActionLibrary(mc.MultiPointCommand):
             
             self.last_transform = base_to_tag.transform
           
-            print(self.cam_to_tag_angle, self.base_to_tag_angle)
-            rospy.loginfo("Success")
+            #print(self.cam_to_tag_angle, self.base_to_tag_angle)
+            #rospy.loginfo("Success")
             return True
         except:
             rospy.loginfo("Transformm not found?")
@@ -214,39 +220,59 @@ class ActionLibrary(mc.MultiPointCommand):
 
     ##CAMERA SPECIFIC METHODS
     def _pan_follower_callback(self, angle):
-        #if abs(angle - self.last_camera_angle) > 0.1:
+        #if abs(angle - self.last_pan_camera_angle) > 0.1:
         print(angle)
         new_pose = {"joint_head_pan": angle}
         self.single_joint('joint_head_pan',points=[angle])
         self.last_pan_camera_angle = angle
 
     def _camera_following_callback(self, angle):
-        angle += np.pi/8
-        new_pose = {"joint_head_tilt": angle}
-        self.single_joint('joint_head_tilt', points=[angle])
+        if abs(angle - self.last_camera_angle) > 0.1:
+            angle += np.pi/8
+            new_pose = {"joint_head_tilt": angle}
+            self.single_joint('joint_head_tilt', points=[angle])
         self.last_camera_angle = angle
     
     def followTfCamera(self):
-        rate = rospy.Rate(10) # 10hz
-        print("are we doing anything")
+        rate = rospy.Rate(1000) # 10hz
         while not rospy.is_shutdown():
-            result = self.handleTransforms("utensil_end")
-            if result:    
-                self._camera_following_callback(self.cam_to_tag_angle)
-                self._pan_follower_callback(self.base_to_tag_angle)
+            if self.follow_point is not None: 
+                result = self.handleTransforms("utensil_end")
+                if result:    
+                    self._camera_following_callback(self.cam_to_tag_angle)
+                    self._pan_follower_callback(self.base_to_tag_angle)
+            else:
+                rospy.loginfo("Follow Point Not Set")
             rate.sleep()
 
     def testing(self):
-        self.move_to_pose({"joint_lift":0.5, "wrist_extension":0, "wrist_yaw":2.5})
+        self.single_joint('joint_lift', [0.2,1,0.2,1,0.2,1,0.2,1])
+        #rospy.sleep(2)
+        #self.move_to_pose({"joint_lift":1}, return_before_done = True)
+
+    def main(self):
+        #Spits out camera movements
+        if self.follow_point is not None: 
+            result = self.handleTransforms(self.follow_point)
+            if result:    
+                self._camera_following_callback(self.cam_to_tag_angle)
+                self._pan_follower_callback(self.base_to_tag_angle)
+        
+
+            
 
 action = ActionLibrary()
+#action_two =  ActionLibrary()
 #rospy.sleep(1)
 
-x = threading.Thread(target=action.move_to_pose({"joint_lift":1.1, 'wrist_extension': 0},return_before_done = True))
-y = threading.Thread(target=action.followTfCamera())
-#x.start()
-#print("starting y")
-y.start()
+
+
+
+action.follow_point = "utensil_end"
+w = threading.Thread(target=action.testing)
+w.start()
+#t = threading.Thread(target=action.move_to_pose({'joint_head_tilt': 0}, return_before_done = True))
+#t.start()
 #rospy.sleep(2)
 #action.test_camera()
 #action.move_to_pose({"wrist_extension":0.5}, return_before_done = True)
