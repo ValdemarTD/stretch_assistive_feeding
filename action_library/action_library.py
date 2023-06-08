@@ -3,6 +3,7 @@ import multipoint_command as mc
 import rospy
 import numpy as np
 import math
+import math
 import threading
 from std_msgs.msg import String
 from sensor_msgs.msg import JointState
@@ -44,17 +45,21 @@ class ActionLibrary(mc.MultiPointCommand):
     
     def turnRight(self):
         "Rotates CCW 90 degrees"
-        self.follow_point = "base_right"
-        self.move_to_pose({'rotate_mobile_base':-np.pi/2})
-        self.follow_point = None 
+        if self.handleTransforms("link_aruco_right_base"):
+            self.move_to_pose({'joint_head_pan':self.base_to_tag_angle})
+            self.move_to_pose({'joint_head_tilt':self.cam_to_tag_angle + np.pi/5})
+            self.move_to_pose({'rotate_mobile_base':-np.pi/2})
+        
 
 
     def turnLeft(self):
         """Rotaates CW 90 degrees"""
-        
-        self.follow_point = "base_left"
-        self.move_to_pose({'rotate_mobile_base':np.pi/2})
-        self.follow_point = None 
+      
+        if self.handleTransforms("link_aruco_left_base"):
+            self.move_to_pose({'joint_head_pan':self.base_to_tag_angle})
+            self.move_to_pose({'joint_head_tilt':self.cam_to_tag_angle})
+            self.move_to_pose({'rotate_mobile_base':np.pi/2})
+     
 
 
     def toggleGripper(self, open):
@@ -97,31 +102,91 @@ class ActionLibrary(mc.MultiPointCommand):
 #        joint_config = self.ik.goTo(goal)
 #        self.move_to_pose(joint_config)
 #        return True 
-        
+    
 
-    def deliveryMotion(self, single):
+    def deliveryMotion(self):
         "WIP Full grasp + delivery motion"
-        if single: 
-            self.follow_point = "utensil_end"
-        self.issue_multipoint_command([[0, 1.1, 2.5,0,0]], accelerations=[0.05,0.05,0.05,0.05,0])
-        self.issue_multipoint_command([[0.4,1.1,0,0,0]], accelerations=[0.05,0.05,0.5,0.5,0], velocities=[0.5,1,0.4, 0,0])
+        self.moveWithCamera(target_point=[0, 1.0, np.pi/2],joints=['wrist_extension', 'joint_lift','joint_wrist_yaw'], target_accelerations=[0.05, 0.05, 0.5])
+        self.moveWithCamera(target_point=[0.4, 0.4], joints=['wrist_extension','joint_wrist_yaw'], focus="link_aruco_top_wrist")
 
 
 
     def retrieveFood(self):
-        self.issue_multipoint_command([[0.25, 0.93, 0, 0,0]], accelerations=[1,1,1,1])
-        self.issue_multipoint_command([[0.25,0.9,0,0,-0.5], [0.25, 0.9, 0, 0.2,-0.4], [0.25, 0.9, 0 ,0.3,-0.3], [0.25, 0.9, 0 ,0,0], 
-                                       [0.25, 0.95, 0, 0.0,0],[0, 0.9, 2.5, 0,0]], velocities = [0.1,0.1,0.4,0.1, 0.3])
+        self.moveWithCamera([0.25, 0.93, 0, 0,0], joints=['wrist_extension','joint_lift', 'joint_wrist_yaw', 'joint_wrist_roll', 'joint_wrist_pitch'], 
+                            target_accelerations=[1,1,1,1,1])
+        self.moveWithCamera(target_point= [0.9, 0,-0.5],joints=['joint_lift','joint_wrist_roll','joint_wrist_pitch'], target_velocities=[0.1, 0.1,0.3])
+        self.moveWithCamera(target_point=[0.2,-0.4], joints=['joint_wrist_roll','joint_wrist_pitch'],  target_velocities=[0.1,0.3])
+        self.moveWithCamera(target_point=[0.3,-0.3], joints=['joint_wrist_roll','joint_wrist_pitch'],  target_velocities=[0.1,0.3])
+        self.moveWithCamera(target_point=[0,0], joints=['joint_wrist_roll','joint_wrist_pitch'],  target_velocities=[0.1,0.3])
+        self.moveWithCamera(target_point=[0,np.pi/2], joints=["wrist_extension", "joint_wrist_yaw"], target_velocities=[0.1, 0.4])
         
+
+    def randomMove(self):
+        self.moveWithCamera([0,1, 0], joints=['wrist_extension', 'joint_lift','joint_wrist_yaw'])
+        self.moveWithCamera([0.3,0.5, 1.5], joints=['wrist_extension', 'joint_lift', 'joint_wrist_yaw'])
+        self.moveWithCamera([0.1,1.0, 2.3], joints=['wrist_extension', 'joint_lift', 'joint_wrist_yaw'])
+        self.moveWithCamera([0,0.75, 0.8], joints=['wrist_extension', 'joint_lift', 'joint_wrist_yaw'])
+
+    def jointsClose(self, joints, target_point):
+        """
+        Checks if joints are close enough/ if the movement was sucessful yet
+        :param joints: A list of strings of joint names
+        :param target_point list of target points in floats, in same order as joints
+        """
+        i=0
+        truth = []
+        joint_positions = self.print_states(joints=joints)
+        print(joint_positions)
+        for value in joint_positions.values():
+            if np.isclose(value, target_point[i], atol=0.01):
+                truth.append(True)
+            else:
+                truth.append(False)
+            i+=1
+        print(truth)
+        return not (False in truth)
+
+
+    def moveWithCamera(self, target_point, joints, target_velocities=None, target_accelerations=None, focus="utensil_end"):
+        camera_joints = ['joint_head_pan', 'joint_head_tilt']
+        combined_joints = camera_joints + joints
+
+        #Change camera position until the intended target configuration is reached! 
+        is_close = self.jointsClose(joints=joints, target_point=target_point) 
+        while not is_close:
+            if self.handleTransforms(focus):
+                correction = np.pi/7
+                pan_point = self.base_to_tag_angle
+                tilt_point = self.cam_to_tag_angle + correction
+                camera_target = [pan_point, tilt_point]
+                final_target = camera_target + target_point
+
+                camera_acceleration = [4,4]
+                if target_accelerations is not None:
+                    final_acceleration = camera_acceleration + target_accelerations
+                else:
+                    final_acceleration = None
+
+                camera_velocities = [4,4]
+                if target_velocities is not None:
+                    final_velocity = camera_velocities + target_velocities
+                else:
+                    final_velocity = None
+                #Send/update command
+                self.issue_multipoint_command(shape=[final_target], 
+                                              joints=combined_joints, accelerations=final_acceleration,
+                                                velocities=final_velocity)
+            #Update condition
+            is_close = self.jointsClose(joints=joints, target_point=target_point)
+            rospy.sleep(0.02)
+        print("Ending While")
 
     def fullRetrieveAndDeliver(self):
         self.follow_point = "utensil_end"
         self.retrieveFood()
         self.turnRight()
-        #self.follow_point = "utensil_end"
-        rospy.sleep(2)
-        self.deliveryMotion(False)
-        #self.follow_point = None 
+        self.deliveryMotion()
+        print("Completed")
         
 
     def mockIK(self):
@@ -137,14 +202,15 @@ class ActionLibrary(mc.MultiPointCommand):
         Gets transform vectors from aruco to base and aruco to camera, computes angle between them. Publishes transforms and camera angle needed
         to center on aruco tag 
         """
+        print(tag_name)
         try:
             # Get transforms from the tag to the camera and base
             base_to_tag:TransformStamped = self.tf_buffer.lookup_transform('base_link', tag_name, rospy.Time(0))
             
             #Brian - There was a issue where it was more diffidult to get the angle while using the camera link as the source
             cam_to_tag:TransformStamped = self.tf_buffer.lookup_transform( 'camera_link',tag_name, rospy.Time(0))
-
-            print("x",cam_to_tag.transform.translation.x, "y",cam_to_tag.transform.translation.y,"z", cam_to_tag.transform.translation.z)
+            #print("~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~")
+            #print("x",cam_to_tag.transform.translation.x, "y",cam_to_tag.transform.translation.y,"z", cam_to_tag.transform.translation.z)
             self.count =0
             # Get angle between the tag and the camera
             cam_hypotonuse = (cam_to_tag.transform.translation.x ** 2 + cam_to_tag.transform.translation.y ** 2) ** 0.5
@@ -159,8 +225,6 @@ class ActionLibrary(mc.MultiPointCommand):
             
             self.last_transform = base_to_tag.transform
           
-            #print(self.cam_to_tag_angle, self.base_to_tag_angle)
-            #rospy.loginfo("Success")
             return True
         except:
             rospy.loginfo("Transformm not found?")
@@ -206,6 +270,7 @@ class ActionLibrary(mc.MultiPointCommand):
         print_states function to deal with the incoming JointState messages.
         :param self: The self reference.
         :param joints: A list of string values of joint names.
+        return: current positions of given joints
         """
         joint_positions = {}
         for joint in joints:
@@ -223,18 +288,20 @@ class ActionLibrary(mc.MultiPointCommand):
         #if abs(angle - self.last_pan_camera_angle) > 0.1:
         print(angle)
         new_pose = {"joint_head_pan": angle}
-        self.single_joint('joint_head_pan',points=[angle])
+        #self.single_joint('joint_head_pan',points=[angle])
+        self.move_to_pose(new_pose,return_before_done=True)
         self.last_pan_camera_angle = angle
 
     def _camera_following_callback(self, angle):
         if abs(angle - self.last_camera_angle) > 0.1:
             angle += np.pi/8
             new_pose = {"joint_head_tilt": angle}
-            self.single_joint('joint_head_tilt', points=[angle])
+            #self.single_joint('joint_head_tilt', points=[angle])
+            self.move_to_pose(new_pose, return_before_done=True)
         self.last_camera_angle = angle
     
     def followTfCamera(self):
-        rate = rospy.Rate(1000) # 10hz
+        rate = rospy.Rate(100) # 10hz
         while not rospy.is_shutdown():
             if self.follow_point is not None: 
                 result = self.handleTransforms("utensil_end")
@@ -246,9 +313,14 @@ class ActionLibrary(mc.MultiPointCommand):
             rate.sleep()
 
     def testing(self):
-        self.single_joint('joint_lift', [0.2,1,0.2,1,0.2,1,0.2,1])
+        # self.single_joint('joint_lift', [0.2,1,0.2,1,0.2,1,0.2,1])
+        self.single_joint('joint_lift', [0.2,1])
         #rospy.sleep(2)
-        #self.move_to_pose({"joint_lift":1}, return_before_done = True)
+        #self.move_to_pose({"joint_lift":1})
+    
+    def testingtwo(self):
+        self.single_joint('wrist_extension', [0.2,0.5,0.2,0.5,0.2,0.5,0.2,0.5])
+        #rospy.sleep(2)
 
     def main(self):
         #Spits out camera movements
@@ -257,6 +329,7 @@ class ActionLibrary(mc.MultiPointCommand):
             if result:    
                 self._camera_following_callback(self.cam_to_tag_angle)
                 self._pan_follower_callback(self.base_to_tag_angle)
+        
         
 
             
@@ -267,13 +340,9 @@ action = ActionLibrary()
 
 
 
+rospy.sleep(2)
 
-action.follow_point = "utensil_end"
-w = threading.Thread(target=action.testing)
-w.start()
-#t = threading.Thread(target=action.move_to_pose({'joint_head_tilt': 0}, return_before_done = True))
-#t.start()
-#rospy.sleep(2)
+action.randomMove()
 #action.test_camera()
 #action.move_to_pose({"wrist_extension":0.5}, return_before_done = True)
 try:

@@ -25,22 +25,20 @@ class MultiPointCommand(hm.HelloNode):
 		time = 10
 
 	
-	def createPath(self, shape, velocities = None, accelerations = None):
+	def createPath(self, points, velocities = None, accelerations = None):
 		converted_shape = []
-		for point in shape:
+		for point in points:
 			trajectory = JointTrajectoryPoint()
-			trajectory.positions = [point[0], point[1],point[2], point[3], point[4]]
+			trajectory.positions = [point[i] for i in range(len(point))]
 			if velocities is not None:
 				trajectory.velocities = velocities
-			if accelerations is None:
-				pass
-			else:
-				trajectory.accelerations = accelerations
+			if accelerations is not None:
+				trajectory.accelerations = accelerations				
 			converted_shape.append(trajectory)
 		return converted_shape
 
 
-	def issue_multipoint_command(self, shape, velocities = None, accelerations = None):
+	def issue_multipoint_command(self, shape, joints,velocities = None, accelerations = None):
 		"""
 		Function that makes an action call and sends multiple joint trajectory goals
 		to the joint_lift, wrist_extension, and joint_wrist_yaw.
@@ -51,10 +49,10 @@ class MultiPointCommand(hm.HelloNode):
 		# the joint names as a list
 		
 		trajectory_goal = FollowJointTrajectoryGoal()
-		trajectory_goal.trajectory.joint_names = ['wrist_extension','joint_lift', 'joint_wrist_yaw', 'joint_wrist_roll', 'joint_wrist_pitch']
+		trajectory_goal.trajectory.joint_names = joints
 		# Then trajectory_goal.trajectory.points is defined by a list of the joint
 		# trajectory points
-		trajectory_goal.trajectory.points = self.createPath(shape=shape, velocities=velocities, accelerations=accelerations)
+		trajectory_goal.trajectory.points = self.createPath(points=shape, velocities=velocities, accelerations=accelerations)
 
 		# Specify the coordinate frame that we want (base_link) and set the time to be now
 		trajectory_goal.trajectory.header.stamp = rospy.Time(0.0)
@@ -64,7 +62,7 @@ class MultiPointCommand(hm.HelloNode):
 		# for the result before it exits the python script
 		self.trajectory_client.send_goal(trajectory_goal)
 		#rospy.loginfo('Sent list of goals = {0}'.format(trajectory_goal))
-		self.trajectory_client.wait_for_result()
+		#self.trajectory_client.wait_for_result()
 		
 
 
@@ -93,7 +91,7 @@ class MultiPointCommand(hm.HelloNode):
 		# for the result before it exits the python script
 		self.trajectory_client.send_goal(trajectory_goal)
 		rospy.loginfo('Sent list of goals = {0}'.format(trajectory_goal))
-		#self.trajectory_client.wait_for_result()
+		self.trajectory_client.wait_for_result()
 		#time.sleep()
 	
 
