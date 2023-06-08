@@ -16,7 +16,6 @@ from PyQt5 import QtCore
 from PyQt5 import QtGui
 from PyQt5.QtWidgets import QApplication, QWidget, QLabel, QPushButton, QVBoxLayout, QHBoxLayout, QMainWindow
 
-
 class NavigationController():
     def __init__(self, forwards_scale = 1, backwards_scale = 1, left_scale = 1, right_scale = 1, parent=None):
         self.areas = [
@@ -353,6 +352,107 @@ class ArmController():
     def mouseover_right(self):
         print("Mouseover right")
 
+class GripperController():
+    def __init__(self, forwards_scale = 1, backwards_scale = 1, left_scale = 1, right_scale = 1, parent=None, dex_wrist=False):
+        if not dex_wrist:
+            self.areas = [
+                {
+                    "geometry" : shapely.Polygon([(0, 0), (0.5, 0.5), (1, 0)]),
+                    "callback" : self.open_gripper
+                },
+                {
+                    "geometry" : shapely.Polygon([(0, 1), (0.5, 0.5), (1, 1)]),
+                    "callback" : self.close_gripper
+                },
+                {
+                    "geometry" : shapely.Polygon([(0, 0), (0.5, 0.5), (0, 1)]),
+                    "callback" : self.turn_left
+                },
+                {
+                    "geometry" : shapely.Polygon([(1, 0), (0.5, 0.5), (1, 1)]),
+                    "callback" : self.turn_right
+                }
+            ]
+        self.grip_factor = 0.05
+        self.yaw_factor = 0.1
+        self.parent = parent
+        self.joint_states = None
+        self.arm_client = actionlib.SimpleActionClient('/stretch_controller/follow_joint_trajectory', FollowJointTrajectoryAction)
+        server_reached = self.arm_client.wait_for_server(timeout=rospy.Duration(60.0))
+        self.joints_subscriber = rospy.Subscriber('/joint_states', JointState, self.joint_states_cb)
+        #self.head_publisher = rospy.Publisher("/stretch/cmd_vel", Twist, queue_size=5)
+
+    def joint_states_cb(self, data):
+        self.joint_states = data
+
+    def mouseover_event(self, event):
+        pass
+
+    def click_event(self, event):
+        dimensions = self.parent.image_frame.frameGeometry()
+        norm_x = event.x() / dimensions.width()
+        norm_y = event.y() / dimensions.height()
+
+        point = shapely.Point((norm_x, norm_y))
+
+        for area in self.areas:
+            if area["geometry"].contains(point):
+                area["callback"]()
+        
+
+    def open_gripper(self):
+        command = {'joint': 'joint_gripper_finger_left', 'delta': self.grip_factor}
+        self.send_command(command)
+
+    def close_gripper(self):
+        command = {'joint': 'joint_gripper_finger_left', 'delta': -self.grip_factor}
+        self.send_command(command)
+
+    def turn_left(self):
+        command = {'joint': 'joint_wrist_yaw', 'delta': self.yaw_factor}
+        self.send_command(command)
+
+    def turn_right(self):
+        command = {'joint': 'joint_wrist_yaw', 'delta': -self.yaw_factor}
+        self.send_command(command)
+
+    def send_command(self, command):
+        while self.joint_states == None:
+            time.sleep(0.1)
+        try:
+            joint_state = self.joint_states
+            point = JointTrajectoryPoint()
+            point.time_from_start = rospy.Duration(0.1)
+            trajectory_goal = FollowJointTrajectoryGoal()
+            trajectory_goal.goal_time_tolerance = rospy.Time(0.25)
+            joint_name = command['joint']
+            trajectory_goal.trajectory.joint_names = [joint_name]
+            joint_index = joint_state.name.index(joint_name)
+            joint_value = joint_state.position[joint_index]
+            delta = command['delta']
+            new_value = joint_value + delta
+            point.positions = [new_value]
+            trajectory_goal.trajectory.points = [point]
+            trajectory_goal.trajectory.header.stamp = rospy.Time.now()
+            self.arm_client.send_goal(trajectory_goal)
+        except Exception as ex:
+            logging.error("Error: Exception encountered while passing command {command} to camera controls")
+            logging.error(ex)
+        
+
+    def mouseover_forwards(self):
+        print("Mouseover forwards")
+    
+    def mouseover_backwards(self):
+        print("Mouseover backwards")
+    
+    def mouseover_left(self):
+        print("Mouseover left")
+    
+    def mouseover_right(self):
+        print("Mouseover right")
+
+
 #Based on the top answer to this question https://stackoverflow.com/questions/57204782/show-an-opencv-image-with-pyqt5
 class DisplayImageWidget(QWidget):
     def __init__(self, parent=None):
@@ -362,7 +462,7 @@ class DisplayImageWidget(QWidget):
         #self.button = QPushButton('Show picture')
         #self.button.clicked.connect(self.show_image)
         self.image_frame = QLabel()
-        self.image_frame.setFixedSize(480, 640)
+        self.image_frame.setFixedSize(432, 768)
 
         #Needed to handle mouse move events
         self.setMouseTracking(True)
@@ -370,6 +470,7 @@ class DisplayImageWidget(QWidget):
         self.nav_controller = NavigationController(parent=self)
         self.cam_controller = CameraController(parent=self)
         self.arm_controller = ArmController(parent=self)
+        self.grip_controller = GripperController(parent=self)
 
         self.mode = "camera"
 
@@ -385,6 +486,10 @@ class DisplayImageWidget(QWidget):
             "arm" : {
                 "show_function" : self.only_show_image,
                 "controller" : self.arm_controller
+            },
+            "gripper" : {
+                "show_function" : self.only_show_image,
+                "controller" : self.grip_controller
             }
         }
 
@@ -482,6 +587,13 @@ class MainWindow(QMainWindow):
         self.arm_mode_button.setFixedSize(100, 100)
         self.arm_mode_button.clicked.connect(lambda: self.change_video_mode("arm"))
         self.buttons_layout.addWidget(self.arm_mode_button)
+
+        self.grip_mode_button = QPushButton(text="Gripper", parent=self.buttons_widget)
+        self.grip_mode_button.setCheckable(True)
+        self.grip_mode_button.setAutoExclusive(True)
+        self.grip_mode_button.setFixedSize(100, 100)
+        self.grip_mode_button.clicked.connect(lambda: self.change_video_mode("gripper"))
+        self.buttons_layout.addWidget(self.grip_mode_button)
         
         
 
@@ -524,7 +636,7 @@ class MainWindow(QMainWindow):
 
     def camera_cb(self, data):
         cv_image = cv2.rotate(self.vid_bridge.imgmsg_to_cv2(data), cv2.ROTATE_90_CLOCKWISE)
-        self.vid_widget.show_image_by_mode(cv_image)
+        self.vid_widget.show_image_by_mode(cv2.resize(cv_image, (self.vid_widget.image_frame.size().width(), self.vid_widget.image_frame.size().height())))
 
 
     def change_video_mode(self, mode):
