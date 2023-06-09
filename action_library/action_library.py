@@ -10,6 +10,7 @@ from sensor_msgs.msg import JointState
 from geometry_msgs.msg import TransformStamped, Transform
 import tf2_ros
 import time 
+import datetime as dt
 #import ik_solver
 
 #Test
@@ -147,19 +148,26 @@ class ActionLibrary(mc.MultiPointCommand):
         return not (False in truth)
 
 
-    def moveWithCamera(self, target_point, joints, target_velocities=None, target_accelerations=None, focus="utensil_end"):
+    def moveWithCamera(self, target_point, joints, target_velocities=None, target_accelerations=None, focus="utensil_end", lookup=False):
         camera_joints = ['joint_head_pan', 'joint_head_tilt']
         combined_joints = camera_joints + joints
 
         #Change camera position until the intended target configuration is reached! 
         is_close = self.jointsClose(joints=joints, target_point=target_point) 
+        start = dt.datetime.now()
         while not is_close:
+            current_time = dt.datetime.now()
+            difference = (current_time-start).total_seconds()
             if self.handleTransforms(focus):
                 correction = np.pi/7
                 pan_point = self.base_to_tag_angle
                 tilt_point = self.cam_to_tag_angle + correction
+                if difference>1 and difference <= 3 and lookup:
+                    print("in here")
+                    tilt_point = 0
                 camera_target = [pan_point, tilt_point]
                 final_target = camera_target + target_point
+                
 
                 camera_acceleration = [4,4]
                 if target_accelerations is not None:
@@ -342,7 +350,7 @@ action = ActionLibrary()
 
 rospy.sleep(2)
 
-action.randomMove()
+action.moveWithCamera(target_point=[0.5], joints=["wrist_extension"], lookup=True)
 #action.test_camera()
 #action.move_to_pose({"wrist_extension":0.5}, return_before_done = True)
 try:
