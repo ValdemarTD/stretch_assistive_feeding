@@ -107,7 +107,7 @@ class ActionLibrary(mc.MultiPointCommand):
     def deliveryMotion(self):
         "WIP Full grasp + delivery motion"
         self.moveWithCamera(target_point=[0, 1.0, np.pi/2],joints=['wrist_extension', 'joint_lift','joint_wrist_yaw'], target_accelerations=[0.05, 0.05, 0.5])
-        self.moveWithCamera(target_point=[0.4, 0.4], joints=['wrist_extension','joint_wrist_yaw'], focus="link_aruco_top_wrist")
+        self.moveWithCamera(target_point=[0.4, 0.4], joints=['wrist_extension','joint_wrist_yaw'], target_velocities=[0.05,0.05], focus="link_aruco_top_wrist")
 
 
 
