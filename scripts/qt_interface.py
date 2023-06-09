@@ -156,6 +156,7 @@ class CameraController():
         self.parent = parent
         self.joint_states = None
         self.head_client = actionlib.SimpleActionClient('/stretch_controller/follow_joint_trajectory', FollowJointTrajectoryAction)
+        #self.head_client = actionlib.SimpleActionClient('/stretch_head_controller/follow_joint_trajectory', FollowJointTrajectoryAction)
         server_reached = self.head_client.wait_for_server(timeout=rospy.Duration(60.0))
         self.joints_subscriber = rospy.Subscriber('/joint_states', JointState, self.joint_states_cb)
         #self.head_publisher = rospy.Publisher("/stretch/cmd_vel", Twist, queue_size=5)
@@ -255,6 +256,7 @@ class ArmController():
         self.parent = parent
         self.joint_states = None
         self.arm_client = actionlib.SimpleActionClient('/stretch_controller/follow_joint_trajectory', FollowJointTrajectoryAction)
+        #self.arm_client = actionlib.SimpleActionClient('/stretch_arm_controller/follow_joint_trajectory', FollowJointTrajectoryAction)
         server_reached = self.arm_client.wait_for_server(timeout=rospy.Duration(60.0))
         self.joints_subscriber = rospy.Subscriber('/joint_states', JointState, self.joint_states_cb)
         #self.head_publisher = rospy.Publisher("/stretch/cmd_vel", Twist, queue_size=5)
@@ -373,11 +375,47 @@ class GripperController():
                     "callback" : self.turn_right
                 }
             ]
+        else:
+            self.areas = [
+                {
+                    "geometry" : shapely.Polygon([(0, 1), (0, 0.7), (0.3, 0.7), (0.3, 1)]),
+                    "callback" : self.open_gripper
+                },
+                {
+                    "geometry" : shapely.Polygon([(1, 1), (0.7, 1), (0.7, 0.7), (1, 0.7)]),
+                    "callback" : self.close_gripper
+                },
+                {
+                    "geometry" : shapely.Polygon([(0, 0.7), (0.5, 0.7), (0.5, 0.3), (0, 0.3)]),
+                    "callback" : self.turn_left
+                },
+                {
+                    "geometry" : shapely.Polygon([(1, 0.7), (0.5, 0.7), (0.5, 0.3), (1, 0.3)]),
+                    "callback" : self.turn_right
+                },
+                {
+                    "geometry" : shapely.Polygon([(0.3, 1), (0.7, 1), (0.7, 0.7), (0.3, 0.7)]),
+                    "callback" : self.pitch_down
+                },
+                {
+                    "geometry" : shapely.Polygon([(0.3, 0), (0.7, 0), (0.7, 0.3), (0.3, 0.3)]),
+                    "callback" : self.pitch_up
+                },
+                {
+                    "geometry" : shapely.Polygon([(0, 0), (0.3, 0), (0.3, 0.3), (0, 0.3)]),
+                    "callback" : self.roll_left
+                },
+                {
+                    "geometry" : shapely.Polygon([(0.7, 0), (0.7, 0.3), (1, 0.3), (1, 0)]),
+                    "callback" : self.roll_right
+                }
+            ]
         self.grip_factor = 0.05
         self.yaw_factor = 0.1
         self.parent = parent
         self.joint_states = None
         self.arm_client = actionlib.SimpleActionClient('/stretch_controller/follow_joint_trajectory', FollowJointTrajectoryAction)
+        #self.arm_client = actionlib.SimpleActionClient('/stretch_gripper_controller/follow_joint_trajectory', FollowJointTrajectoryAction)
         server_reached = self.arm_client.wait_for_server(timeout=rospy.Duration(60.0))
         self.joints_subscriber = rospy.Subscriber('/joint_states', JointState, self.joint_states_cb)
         #self.head_publisher = rospy.Publisher("/stretch/cmd_vel", Twist, queue_size=5)
@@ -414,6 +452,22 @@ class GripperController():
 
     def turn_right(self):
         command = {'joint': 'joint_wrist_yaw', 'delta': -self.yaw_factor}
+        self.send_command(command)
+
+    def pitch_up(self):
+        command = {'joint': 'joint_wrist_pitch', 'delta': self.yaw_factor}
+        self.send_command(command)
+
+    def pitch_down(self):
+        command = {'joint': 'joint_wrist_pitch', 'delta': -self.yaw_factor}
+        self.send_command(command)
+
+    def roll_left(self):
+        command = {'joint': 'joint_wrist_roll', 'delta': self.yaw_factor}
+        self.send_command(command)
+
+    def roll_right(self):
+        command = {'joint': 'joint_wrist_roll', 'delta': -self.yaw_factor}
         self.send_command(command)
 
     def send_command(self, command):
@@ -470,7 +524,7 @@ class DisplayImageWidget(QWidget):
         self.nav_controller = NavigationController(parent=self)
         self.cam_controller = CameraController(parent=self)
         self.arm_controller = ArmController(parent=self)
-        self.grip_controller = GripperController(parent=self)
+        self.grip_controller = GripperController(parent=self, dex_wrist=False)
 
         self.mode = "camera"
 
