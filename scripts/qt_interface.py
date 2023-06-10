@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 import rospy
 import sys
 import os
@@ -463,11 +463,11 @@ class GripperController():
         self.send_command(command)
 
     def roll_left(self):
-        command = {'joint': 'joint_wrist_roll', 'delta': self.yaw_factor}
+        command = {'joint': 'joint_wrist_roll', 'delta': -self.yaw_factor}
         self.send_command(command)
 
     def roll_right(self):
-        command = {'joint': 'joint_wrist_roll', 'delta': -self.yaw_factor}
+        command = {'joint': 'joint_wrist_roll', 'delta': self.yaw_factor}
         self.send_command(command)
 
     def send_command(self, command):
@@ -524,7 +524,7 @@ class DisplayImageWidget(QWidget):
         self.nav_controller = NavigationController(parent=self)
         self.cam_controller = CameraController(parent=self)
         self.arm_controller = ArmController(parent=self)
-        self.grip_controller = GripperController(parent=self, dex_wrist=False)
+        self.grip_controller = GripperController(parent=self, dex_wrist=True)
 
         self.mode = "camera"
 
