@@ -108,15 +108,16 @@ class ActionLibrary(mc.MultiPointCommand):
     def deliveryMotion(self):
         "WIP Full grasp + delivery motion"
         self.moveWithCamera(target_point=[0, 1.0, np.pi/2],joints=['wrist_extension', 'joint_lift','joint_wrist_yaw'], target_accelerations=[0.05, 0.05, 0.5])
-        self.moveWithCamera(target_point=[0.4, 0.4], joints=['wrist_extension','joint_wrist_yaw'], target_velocities=[0.05,0.05], focus="link_aruco_top_wrist")
+        self.moveWithCamera(target_point=[0.3, 0.4], joints=['wrist_extension','joint_wrist_yaw'], target_velocities=[0.05,0.3], focus="link_aruco_top_wrist", lookup=True)
 
 
 
     def retrieveFood(self):
-        self.moveWithCamera([0.25, 0.93, 0, 0,0], joints=['wrist_extension','joint_lift', 'joint_wrist_yaw', 'joint_wrist_roll', 'joint_wrist_pitch'], 
+        self.moveWithCamera([0.25, 0.8, 0, 0,0], joints=['wrist_extension','joint_lift', 'joint_wrist_yaw', 'joint_wrist_roll', 'joint_wrist_pitch'], 
                             target_accelerations=[1,1,1,1,1])
-        self.moveWithCamera(target_point= [0.9, 0,-0.5],joints=['joint_lift','joint_wrist_roll','joint_wrist_pitch'], target_velocities=[0.1, 0.1,0.3])
-        self.moveWithCamera(target_point=[0.2,-0.4], joints=['joint_wrist_roll','joint_wrist_pitch'],  target_velocities=[0.1,0.3])
+        self.moveWithCamera(target_point=[-0.7],joints=['joint_wrist_pitch'])
+        self.moveWithCamera(target_point= [0.77, 0,-0.7],joints=['joint_lift','joint_wrist_roll','joint_wrist_pitch'], target_velocities=[0.1, 0.1,0.3])
+        self.moveWithCamera(target_point=[0.2,-0.6], joints=['joint_wrist_roll','joint_wrist_pitch'],  target_velocities=[0.1,0.3])
         self.moveWithCamera(target_point=[0.3,-0.3], joints=['joint_wrist_roll','joint_wrist_pitch'],  target_velocities=[0.1,0.3])
         self.moveWithCamera(target_point=[0,0], joints=['joint_wrist_roll','joint_wrist_pitch'],  target_velocities=[0.1,0.3])
         self.moveWithCamera(target_point=[0,np.pi/2], joints=["wrist_extension", "joint_wrist_yaw"], target_velocities=[0.1, 0.4])
@@ -162,9 +163,11 @@ class ActionLibrary(mc.MultiPointCommand):
                 correction = np.pi/7
                 pan_point = self.base_to_tag_angle
                 tilt_point = self.cam_to_tag_angle + correction
-                if difference>1 and difference <= 3 and lookup:
+                if difference>1.5 and difference <= 4 and lookup:
                     print("in here")
                     tilt_point = 0
+                elif lookup:
+                    tilt_point += np.pi/4
                 camera_target = [pan_point, tilt_point]
                 final_target = camera_target + target_point
                 
@@ -350,7 +353,7 @@ action = ActionLibrary()
 
 rospy.sleep(2)
 
-action.moveWithCamera(target_point=[0.5], joints=["wrist_extension"], lookup=True)
+action.fullRetrieveAndDeliver()
 #action.test_camera()
 #action.move_to_pose({"wrist_extension":0.5}, return_before_done = True)
 try:
